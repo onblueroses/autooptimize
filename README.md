@@ -39,7 +39,11 @@ Tell Claude to start a session:
 
 ```
 Run the autooptimize loop.
+```
+```
 Run the autooptimize loop, max 10 experiments.
+```
+```
 Run a dry-run of the autooptimize loop - show hypotheses but don't execute.
 ```
 
@@ -60,7 +64,7 @@ Each project needs `.claude/autooptimize.toml` defining:
 - **constraints** - determinism checks, improvement thresholds, experiment limits
 - **context** - performance docs, experiment log path
 
-Remote benchmarking is optional. Omit `[benchmark.vps]` to benchmark locally.
+VPS benchmarking is optional. Omit `[benchmark.vps]` to benchmark locally.
 
 ## License
 
