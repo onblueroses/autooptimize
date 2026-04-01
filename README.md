@@ -12,40 +12,36 @@ One metric, one loop, git-based rollback. Hypothesize, implement, benchmark, kee
    - Generate optimization hypothesis from performance docs + past results
    - Create isolated branch, implement change
    - Run local gates (compile, lint, test, determinism)
-   - Benchmark on VPS (or locally)
+   - Benchmark on a remote server or locally
    - Keep if improvement exceeds threshold (default 2%), discard otherwise
    - Log result to experiment log
 4. Stop after max experiments or N consecutive failures
 
-## Usage
+## Setup
 
-Copy `autooptimize-methodology.md` into your project's Claude Code directory:
+**1. Copy the methodology doc** into your project's `.claude/` directory:
 
 ```
 .claude/reference/autooptimize-methodology.md
 ```
 
-Add a reference in your project's `CLAUDE.md` so Claude loads it automatically:
+**2. Create a project config** at `.claude/autooptimize.toml`. See the Config Reference section in `autooptimize-methodology.md` for the full schema.
 
-```markdown
-When asked to run the optimization loop, read `.claude/reference/autooptimize-methodology.md`.
+**3. Load the doc** by adding this line to your project's `CLAUDE.md`:
+
+```
+Read .claude/reference/autooptimize-methodology.md before running the optimization loop.
 ```
 
-Then start an optimization session by telling Claude:
+## Usage
+
+Tell Claude to start a session:
 
 ```
 Run the autooptimize loop.
-```
-
-```
 Run the autooptimize loop, max 10 experiments.
-```
-
-```
 Run a dry-run of the autooptimize loop - show hypotheses but don't execute.
 ```
-
-Create a project config at `.claude/autooptimize.toml` in your target project. See the Config Reference section in `autooptimize-methodology.md` for the full schema.
 
 ## Requirements
 
@@ -64,7 +60,7 @@ Each project needs `.claude/autooptimize.toml` defining:
 - **constraints** - determinism checks, improvement thresholds, experiment limits
 - **context** - performance docs, experiment log path
 
-VPS benchmarking is optional. Omit `[benchmark.vps]` to benchmark locally.
+Remote benchmarking is optional. Omit `[benchmark.vps]` to benchmark locally.
 
 ## License
 
