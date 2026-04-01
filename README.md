@@ -14,18 +14,36 @@ One metric, one loop, git-based rollback. Hypothesize, implement, benchmark, kee
    - Run local gates (compile, lint, test, determinism)
    - Benchmark on VPS (or locally)
    - Keep if improvement exceeds threshold (default 2%), discard otherwise
-   - Log result to dual-channel JSONL experiment log
+   - Log result to experiment log
 4. Stop after max experiments or N consecutive failures
 
 ## Usage
 
-Copy `autooptimize-methodology.md` into your Claude Code reference directory:
+Copy `autooptimize-methodology.md` into your project's Claude Code directory:
 
 ```
 .claude/reference/autooptimize-methodology.md
 ```
 
-Then add it to your MEMORY.md reference table so Claude loads it when optimization work is relevant.
+Add a reference in your project's `CLAUDE.md` so Claude loads it automatically:
+
+```markdown
+When asked to run the optimization loop, read `.claude/reference/autooptimize-methodology.md`.
+```
+
+Then start an optimization session by telling Claude:
+
+```
+Run the autooptimize loop.
+```
+
+```
+Run the autooptimize loop, max 10 experiments.
+```
+
+```
+Run a dry-run of the autooptimize loop - show hypotheses but don't execute.
+```
 
 Create a project config at `.claude/autooptimize.toml` in your target project. See the Config Reference section in `autooptimize-methodology.md` for the full schema.
 
