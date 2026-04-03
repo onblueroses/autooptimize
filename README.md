@@ -1,10 +1,21 @@
 # autooptimize
 
-Autonomous code optimization loop for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Inspired by Karpathy's [autoresearch](https://github.com/karpathy/autoresearch).
+Autonomous optimization and evaluation toolkit for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Inspired by Karpathy's [autoresearch](https://github.com/karpathy/autoresearch).
 
-One metric, one loop, git-based rollback. Hypothesize, implement, benchmark, keep or discard, repeat.
+Two components:
+1. **Optimization loop** - one metric, one loop, git-based rollback. Hypothesize, implement, benchmark, keep or discard, repeat.
+2. **Evaluation toolkit** - eval type taxonomy, assertion primitives, adversarial evaluator framings, and scripts for measuring AI agent behavior.
 
-## How it works
+## Contents
+
+| File | What it covers |
+|------|---------------|
+| `autooptimize-methodology.md` | Core optimization loop: profiling, A/B benchmarking, hypothesis strategy, decision logic |
+| `eval-methodology.md` | Eval type taxonomy (trigger, behavioral, benchmark, semantic, regression), assertion primitives, fixture formats, dataset design |
+| `evaluator-framings.md` | 7 adversarial framings for LLM evaluators: security-audit, production-load, maintainability, adversarial-user, specification-lawyer, dependency-skeptic, reality-declaration |
+| `scripts/` | Python tools for running trigger evals and aggregating benchmark results |
+
+## Optimization Loop
 
 1. Read per-project config from `.claude/autooptimize.toml`
 2. Establish a baseline measurement
@@ -17,54 +28,59 @@ One metric, one loop, git-based rollback. Hypothesize, implement, benchmark, kee
    - Log result to experiment log
 4. Stop after max experiments or N consecutive failures
 
+## Evaluation Toolkit
+
+### Eval types (cheapest to most expensive)
+
+| Type | What it checks | Cost |
+|------|---------------|------|
+| **Trigger** | Did the right skill/tool fire? | Free (subprocess) |
+| **Behavioral** | Does output contain/not-contain specific content? | Free (string ops) |
+| **Benchmark** | Does a stochastic metric land in acceptable bands? | Low (N runs) |
+| **Semantic** | Does an LLM judge pass the output against criteria? | High (LLM call) |
+| **Regression** | Does output match a known-good baseline? | Medium (diff) |
+
+### Evaluator framings
+
+Adversarial preambles that shift an LLM evaluator's perspective. Each counters a specific class of systematic bias:
+
+- **security-audit** - assumes every input is attacker-controlled
+- **production-load** - assumes 1000 concurrent requests
+- **maintainability** - assumes original author is unreachable
+- **adversarial-user** - assumes users do everything wrong
+- **specification-lawyer** - reads criteria with zero charity
+- **dependency-skeptic** - assumes every external call will fail
+- **reality-declaration** - treats the review as a real deployment, not an exercise
+
+### Scripts
+
+**Trigger eval runner** - tests whether a skill description causes Claude Code to invoke it:
+
+```
+python -m scripts.run_eval \
+  --eval-set path/to/eval-set.json \
+  --skill-path path/to/skill/ \
+  --runs-per-query 3 \
+  --num-workers 10
+```
+
+**Benchmark aggregator** - rolls up multiple eval runs into summary statistics with delta:
+
+```
+python -m scripts.aggregate_benchmark benchmarks/2026-01-15T10-30-00/
+```
+
 ## Setup
 
-**1. Copy the methodology doc** into your project's `.claude/` directory:
+**For the optimization loop:** Copy `autooptimize-methodology.md` into your project's `.claude/reference/` directory and create `.claude/autooptimize.toml`. See the Config Reference section in the methodology doc.
 
-```
-.claude/reference/autooptimize-methodology.md
-```
-
-**2. Create a project config** at `.claude/autooptimize.toml`. See the Config Reference section in `autooptimize-methodology.md` for the full schema.
-
-**3. Load the doc** by adding this line to your project's `CLAUDE.md`:
-
-```
-Read .claude/reference/autooptimize-methodology.md before running the optimization loop.
-```
-
-## Usage
-
-Tell Claude to start a session:
-
-```
-Run the autooptimize loop.
-```
-```
-Run the autooptimize loop, max 10 experiments.
-```
-```
-Run a dry-run of the autooptimize loop - show hypotheses but don't execute.
-```
+**For evals:** Copy `eval-methodology.md` and `evaluator-framings.md` into `.claude/reference/`. Use the scripts directly or adapt them to your eval pipeline.
 
 ## Requirements
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
-- A project with a measurable performance metric
-- A benchmark script that outputs parseable results
+- Python 3.10+ (for scripts)
 - Git (experiments use branch isolation)
-
-## Config
-
-Each project needs `.claude/autooptimize.toml` defining:
-
-- **scope** - which files the optimizer can modify
-- **build** - compile, test, lint, format commands
-- **benchmark** - script, metric name, direction (higher/lower), runs per experiment
-- **constraints** - determinism checks, improvement thresholds, experiment limits
-- **context** - performance docs, experiment log path
-
-VPS benchmarking is optional. Omit `[benchmark.vps]` to benchmark locally.
 
 ## License
 
