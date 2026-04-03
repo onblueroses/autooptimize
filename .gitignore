@@ -1,1 +1,3 @@
 skills/autooptimize/
+__pycache__/
+*.pyc
