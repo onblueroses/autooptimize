@@ -1,5 +1,10 @@
+# Agent-local state
 skills/autooptimize/
 .claude/
+CLAUDE.md
+.env
+
+# Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
