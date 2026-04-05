@@ -1,17 +1,21 @@
 # autooptimize
 
-Autonomous optimization and evaluation for AI coding agents. Inspired by Karpathy's [autoresearch](https://github.com/karpathy/autoresearch).
+Spec engine for autonomous code optimization. Inspired by Karpathy's [autoresearch](https://github.com/karpathy/autoresearch).
 
-I wanted a way to improve Claude Code's performance on my projects without manually tweaking prompts. autooptimize is the loop I built: measure a metric, hypothesize an improvement, implement it on a branch, benchmark, keep or discard. The eval toolkit grew out of needing to actually measure whether changes helped.
+Coding agents can write code. What they can't do well is decide *what* to try and *whether it worked*. autooptimize generates optimization specs - markdown documents that encode a hypothesis, implementation steps, acceptance criteria, and evaluation protocol. Hand a spec to any coding agent and it runs the full experiment without reading anything else.
 
-There's no code to install. You clone the repo, paste SETUP.md into your agent, and it configures itself for your project.
+Profile the codebase, generate a hypothesis from experiment history, write a spec, delegate it, evaluate the result, feed it back. Each iteration is better informed than the last because the learning loop calibrates predictions against observed outcomes.
+
+No code to install. Clone the repo, paste SETUP.md into your agent, and it configures itself.
 
 ## Quick Nav
 
 | I want to... | Go to |
 |--------------|-------|
 | Set up autooptimize on my project | [Quick Start](#quick-start) |
+| See the executable spec format | [`spec-format.md`](spec-format.md) |
 | Understand the optimization loop | [`autooptimize-methodology.md`](autooptimize-methodology.md) |
+| Generate better hypotheses | [`hypothesis-engine.md`](hypothesis-engine.md) |
 | Write evals for my agent | [`eval-methodology.md`](eval-methodology.md) |
 | Use adversarial evaluator framings | [`evaluator-framings.md`](evaluator-framings.md) |
 | Run the eval scripts | [Scripts](#scripts-optional) |
@@ -29,27 +33,29 @@ The agent copies the methodology docs into your project, creates a config, and s
 ## What's Inside
 
 ```
-autooptimize-methodology.md    Core optimization loop: profiling, A/B benchmarking, hypothesis strategy
-eval-methodology.md            Eval type taxonomy, assertion primitives, fixture formats
+spec-format.md                 Executable spec template, executor interface, completeness checklist
+hypothesis-engine.md           Hypothesis generation protocol with tier system and quality rubric
+autooptimize-methodology.md    Core optimization loop: profiling, A/B benchmarking, decision logic
+eval-methodology.md            Eval type taxonomy, assertion primitives, fixture formats, SPRT
 evaluator-framings.md          7 adversarial framings for LLM evaluators
 SETUP.md                       Bootstrap prompt - paste this into your agent
 scripts/                       Python tools for running evals and aggregating benchmarks (optional)
 tests/                         Regression tests for the scripts
 ```
 
-## Optimization Loop
+## How It Works
 
-One metric, one loop, git-based rollback. For each experiment:
+autooptimize decides what to try. The coding agent does the work.
 
-1. Establish baseline measurement
-2. Generate hypothesis from performance docs + past results
-3. Create isolated branch, implement change
-4. Run local gates (compile, lint, test, determinism)
-5. Benchmark against baseline
-6. Keep if improvement exceeds threshold (default 2%), discard otherwise
-7. Log result, repeat
+1. **Profile** the codebase to find bottlenecks
+2. **Generate hypothesis** from experiment history, ranked by estimated impact
+3. **Write a spec** - one markdown file with everything the executor needs
+4. **Delegate** to any coding agent (or run it yourself)
+5. **Evaluate** - cheap gates first (compile, lint, test), then benchmark with SPRT early stopping
+6. **Learn** - results calibrate the next hypothesis
+7. **Repeat** until stopping conditions are met
 
-Stops after max experiments (default 5) or N consecutive failures.
+See [`spec-format.md`](spec-format.md) for the format and a complete example.
 
 ## Evaluation Toolkit
 
