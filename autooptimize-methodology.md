@@ -49,6 +49,7 @@ Initialize -> Profile -> [Hypothesize -> Implement -> Gate -> Benchmark -> Decid
 4. **Load context.** Read:
    - Performance doc (bottleneck analysis, roadmap)
    - Experiment log (avoid repeating failures)
+   - Learning context: `hypothesis_feedback` entries from experiment log (see Learning Loop in `hypothesis-engine.md`). Check for discovered constraints, exhausted avenues, and whether your predictions have been consistently optimistic.
    - Scope files (code that can be modified)
    - Profile data if it exists
 
@@ -83,19 +84,19 @@ Run before the first experiment. Skip only if `[profiling]` is absent from confi
 
 For each experiment (up to `constraints.max_experiments`):
 
-**Step 1: Hypothesize** - Generate hypothesis with basis citation. See Hypothesis Strategy section.
+**Step 1: Hypothesize** - Generate hypothesis with basis citation. See Hypothesis Strategy section. Write the hypothesis as an executable spec (see `spec-format.md` for the template and completeness checklist).
 
-**Step 2: Implement** - Branch (`autoopt/{NNN}-{short-name}`), edit scope files, commit.
+**Step 2: Implement** - Branch (`autoopt/{NNN}-{short-name}`), edit scope files, commit. If using the spec format, the executor follows the Implementation Guidance section of the spec.
 
 **Step 3: Local Gates** - Format, compile, lint, test. Fix once; if still failing, log `gate_fail` with root cause analysis and discard.
 
 **Step 4: Determinism Check** (if configured) - Same seed must produce identical output. Log `determinism_fail` and discard if not.
 
-**Step 5: A/B Benchmark** - See A/B Benchmarking section.
+**Step 5: A/B Benchmark** - See A/B Benchmarking section. If using the spec format, the executor runs the Acceptance Criteria and Evaluation Protocol sections.
 
-**Step 6: Decide** - See Decision Logic section.
+**Step 6: Decide** - See Decision Logic section. If using the spec format, the executor follows the Result Handling section and fills in the Result.
 
-**Step 7: Loop or Stop** - Re-profile after 2+ kept experiments. Check stopping conditions: max experiments, consecutive failures (with escalation), or plateau.
+**Step 7: Log and Loop** - Write hypothesis feedback entry to enrichment log (see Learning Loop in `hypothesis-engine.md`). Re-profile after 2+ kept experiments. Check stopping conditions: max experiments, consecutive failures (with escalation), or plateau.
 
 ### Stopping and Escalation
 
@@ -191,7 +192,7 @@ Build BOTH main and experiment binaries, benchmark back-to-back in the same sess
 
 Push branch, SSH to VPS, build both, run interleaved A/B, restore VPS to main. Never benchmark in separate SSH sessions.
 
-Default runs: 7 per binary (VPS), 12 per binary (local - noisier environment).
+Default runs: 7 per binary (VPS), 12 per binary (local - noisier environment). For early stopping with statistical guarantees, see SPRT Early Stopping in `eval-methodology.md`. For adaptive run counts based on observed variance, see Adaptive Sample Sizing in `eval-methodology.md`.
 
 ### Timeout
 
@@ -203,7 +204,7 @@ Default runs: 7 per binary (VPS), 12 per binary (local - noisier environment).
 
 ## Decision Logic
 
-Three outcomes based on `delta_pct` and `signal_to_noise`:
+Three outcomes based on `delta_pct` and `signal_to_noise`. When using the spec format, the Acceptance Criteria section gates cheaper checks (compile, lint, test) before benchmarking - see Evaluation Composition in `eval-methodology.md`.
 
 **KEEP** - `delta_pct >= min_improvement_pct` AND `snr >= 2.0`:
 - Merge to main, push, clean up branch

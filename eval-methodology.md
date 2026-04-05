@@ -15,6 +15,10 @@ Companion to `autooptimize-methodology.md`. The optimization loop needs good eva
 | Write an eval fixture | Fixture Formats |
 | Decide which type to use | Decision Flowchart |
 | Structure a dataset | Dataset Design |
+| Use bootstrap CI or adaptive sampling | Statistical Rigor |
+| Stop benchmarking early when signal is clear | SPRT Early Stopping |
+| Gate cheap checks before expensive ones | Evaluation Composition |
+| Detect noisy benchmark environments | Noise Floor Detection |
 | Avoid common mistakes | Common Failures |
 
 ---
@@ -329,6 +333,197 @@ Only display pass@k and pass^k when they diverge meaningfully from the raw pass 
 | High | Low | Flaky - sometimes works, sometimes doesn't. Needs debugging. |
 | Low | Low | Broken - rarely works |
 | Low | High | Impossible (pass^k <= pass@k always) |
+
+</details>
+
+---
+
+## Statistical Rigor
+
+<details>
+<summary>Statistical Rigor</summary>
+
+### Bootstrap Confidence Intervals
+
+When you have N benchmark runs and need to know how confident you are in the median, use bootstrap resampling instead of assuming a normal distribution.
+
+**Algorithm (bootstrap difference of medians):**
+```
+1. Collect N paired measurements: baseline[i], experiment[i] for i in 1..N
+   (pairs come from the interleaved A/B protocol)
+2. For j in 1..B (B=10000):
+   a. Sample N indices WITH replacement
+   b. Compute median of resampled baseline values -> boot_baseline[j]
+   c. Compute median of resampled experiment values -> boot_experiment[j]
+   d. boot_delta[j] = boot_experiment[j] - boot_baseline[j]
+3. Sort boot_delta
+4. CI_lower = boot_delta[B * 0.025]
+5. CI_upper = boot_delta[B * 0.975]
+```
+
+This bootstraps the same statistic the decision logic uses (difference of medians), so the CI and the reported delta_pct agree. Resampling the same indices for both arrays preserves the pairing from interleaved runs.
+
+**When to use:** Any benchmark with N >= 7 paired runs. Below 7, the CI is too wide to be useful - increase N first.
+
+**Decision rule:** If the CI does not contain zero, the change is statistically significant. If the CI contains zero, the result is INCONCLUSIVE.
+
+### Adaptive Sample Sizing
+
+Don't commit to a fixed number of runs. Start small, add runs if the signal is unclear.
+
+**Protocol:**
+```
+1. Run initial N=7 paired measurements (minimum for reliable bootstrap CI)
+2. Compute bootstrap CI on paired differences (see above)
+3. Convert CI to percentage of baseline: CI_width_pct = (CI_upper - CI_lower) / baseline_median * 100
+4. If CI_width_pct < min_improvement_pct: stop (enough precision to decide)
+5. If CI_width_pct >= min_improvement_pct AND N < max_runs:
+   a. Add 2 more paired runs (interleaved)
+   b. Recompute CI
+   c. Go to step 3
+6. If N = max_runs and CI still wide: result is INCONCLUSIVE (environment too noisy)
+```
+
+**Thresholds:**
+- Initial runs: 7 per binary (minimum for bootstrap CI)
+- Max runs: 15 per binary (local) or 10 per binary (VPS)
+- CI width target: `min_improvement_pct` from project config (default 2.0%), expressed as percentage of baseline
+
+This saves time on clear wins (stop at 5 runs) and invests more measurement on borderline results.
+
+</details>
+
+---
+
+## SPRT Early Stopping
+
+<details>
+<summary>SPRT Early Stopping</summary>
+
+Sequential Probability Ratio Test (SPRT) lets you decide "keep" or "discard" after each measurement pair, without waiting for all N runs. Useful for large improvements (stop early) and clear regressions (stop early).
+
+### Setup
+
+- **H0 (null):** The experiment has no effect. `delta = 0`.
+- **H1 (alternative):** The experiment improves the metric by at least `min_improvement_pct`.
+- **alpha = 0.05:** Probability of falsely accepting H1 (false positive).
+- **beta = 0.10:** Probability of falsely accepting H0 (false negative / missed improvement).
+- **Boundaries:** `A = ln(beta / (1 - alpha))`, `B = ln((1 - beta) / alpha)`
+
+### Procedure
+
+Assumes paired differences are approximately normal (reasonable for benchmark timing after warmup). Estimate variance from the first 3 pairs, then test sequentially.
+
+**Direction normalization:** If `metric_direction = "lower"` (e.g., latency), flip the sign: `delta_i = baseline_i - experiment_i` so that improvement is always positive. For `metric_direction = "higher"`, use `delta_i = experiment_i - baseline_i`.
+
+```
+1. After each interleaved pair i, compute:
+   delta_i = (experiment_i - baseline_i) * direction_sign
+   where direction_sign = +1 for "higher is better", -1 for "lower is better"
+
+2. After 3+ pairs, estimate:
+   mu_hat = mean(delta_1..delta_i)
+   sigma_hat = stddev(delta_1..delta_i)
+   effect_size = min_improvement_pct / 100 * baseline_median
+
+   Under H0: delta ~ Normal(0, sigma_hat^2)
+   Under H1: delta ~ Normal(effect_size, sigma_hat^2)
+
+3. For each new pair, update cumulative LLR:
+   LLR += (delta_i * effect_size / sigma_hat^2) - (effect_size^2 / (2 * sigma_hat^2))
+
+4. Compare LLR to boundaries:
+   If LLR >= B: ACCEPT H1 (improvement detected, stop early)
+   If LLR <= A: ACCEPT H0 (no improvement, stop early)
+   If A < LLR < B: CONTINUE (not enough evidence yet)
+
+5. If all N pairs exhausted without crossing a boundary:
+   Result is INCONCLUSIVE
+```
+
+### Practical notes
+
+- SPRT is most valuable when the effect is large. A 20% improvement typically triggers after 3-4 pairs. A 2% improvement needs almost all pairs.
+- SPRT does NOT replace the full benchmark for borderline results. If SPRT is inconclusive, fall back to the full adaptive sampling protocol.
+- SPRT assumes each pair is independent. The interleaved B-E-B-E pattern from A/B Benchmarking satisfies this.
+
+### When NOT to use
+
+- When you need the full distribution (tail latency analysis, variance characterization)
+- When the metric is not pair-wise comparable (e.g., accuracy over a dataset, not per-run timing)
+- First experiment in a session (no prior variance estimate to parameterize H1)
+
+</details>
+
+---
+
+## Evaluation Composition
+
+Multi-tier evaluation gates cheap checks before expensive ones. A failure at any tier skips all subsequent tiers.
+
+### Gate Order
+
+| Tier | Check | Cost | Stops on |
+|------|-------|------|----------|
+| 1 | Compile | Free | Syntax errors, type errors |
+| 2 | Lint | Free | Style violations, common bugs |
+| 3 | Test | Cheap | Functional regressions |
+| 4 | Determinism | Cheap | Non-deterministic behavior |
+| 5 | Benchmark | Expensive | Performance regression or no improvement |
+| 6 | Semantic (if applicable) | Very expensive | Quality regression |
+
+### How it works
+
+Run gates sequentially. If gate N fails, the experiment outcome is determined by the fail action in that gate's spec entry. Do not run gate N+1.
+
+This saves the most expensive check (benchmarking, which requires multiple runs and wall-clock time) for experiments that have already passed every cheaper check.
+
+### Worked example
+
+<details>
+<summary>Worked example</summary>
+
+An experiment modifies `src/signal.rs` to add SIMD processing:
+
+1. **Compile** (`cargo build --release`): PASS (3 seconds)
+2. **Lint** (`cargo clippy -- -D warnings`): PASS (5 seconds)
+3. **Test** (`cargo test`): FAIL - one assertion in `test_distance_accuracy` fails because SIMD reorders float additions
+
+**Result:** `gate_fail` logged with root cause "SIMD f32 reordering changes distance results beyond tolerance." Experiment is DISCARDED. Benchmark never runs, saving ~5 minutes of A/B comparison.
+
+The constraint "SIMD must use order-independent reductions" is added to the experiment log and fed back to the hypothesis engine via the learning loop.
+
+</details>
+
+---
+
+## Noise Floor Detection
+
+<details>
+<summary>Noise Floor Detection</summary>
+
+When the benchmark environment is too noisy, small improvements are invisible. Detect this and adapt.
+
+### Protocol
+
+CoV is expressed as a percentage throughout (CoV = std/mean * 100). This keeps it in the same units as `min_improvement_pct`.
+
+1. After warmup, compute CoV of the baseline runs: `CoV_pct = (std / mean) * 100`.
+2. **If CoV_pct <= 2%:** Environment is clean. Proceed with normal thresholds.
+3. **If CoV_pct is 2-5%:** Environment is moderately noisy. Increase N to max_runs. Only accept effects with SNR >= 3.0 (stricter than default 2.0).
+4. **If CoV_pct > 5%:** Environment is too noisy for small-effect detection.
+   - Log the noise level in the experiment entry
+   - Temporarily raise `min_improvement_pct` to `CoV_pct * 3` (e.g., 6% CoV -> require 18% effect)
+   - Consider: is the benchmark running on shared infrastructure? Are background processes interfering? Can you reduce noise at the source?
+5. **If CoV_pct > 10%:** Abort benchmarking. The environment cannot distinguish signal from noise. Fix the environment before continuing.
+
+### Root causes of high noise
+
+- Background processes (CI runners, cron jobs, other benchmarks)
+- Thermal throttling (CPU frequency scaling under sustained load)
+- VM/container overhead (virtualization introduces measurement variance)
+- I/O contention (benchmark writing logs while measuring CPU-bound code)
+- NUMA effects (process migrating between CPU sockets)
 
 </details>
 
