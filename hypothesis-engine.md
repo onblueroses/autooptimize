@@ -13,6 +13,7 @@ This document is the protocol for answering that question. It produces ranked, t
 | Pick between candidates | Picking Between Candidates |
 | Extract signals from past experiments | Experiment Log Synthesis |
 | Check a hypothesis before implementing | Quality Rubric |
+| Run many hypotheses at once | Parallel Search Mode |
 | Log results for future hypotheses | Learning Loop |
 
 ---
@@ -140,6 +141,45 @@ Constant-factor tuning: `#[inline]`, field reordering, struct padding, branch hi
 **Exhaustion condition:** Two consecutive T4 experiments on the same function produced INCONCLUSIVE results. The function is at its noise floor. Move to a different target or escalate.
 
 **Default base rate:** 0.15. Replace with observed rate after 3+ T4 experiments.
+
+---
+
+## Parallel Search Mode
+
+When sequential tier exhaustion is too slow or the search space is wide, switch to parallel hypothesis generation. This pattern won the Paradigm Autoresearch Hackathon: 1,039 AI-generated strategy variants evaluated in parallel, beating 110 manually-crafted iterations. Final score: 42.32 mean edge (1st place).
+
+### When to use
+
+- The metric is fast to evaluate (benchmark completes in <5 minutes)
+- The search space is wide (many plausible approaches, unclear which tier will win)
+- T0-T2 are producing INCONCLUSIVE results (the bottleneck is diffuse, not concentrated)
+- You have compute budget for N parallel experiments
+
+### Protocol
+
+1. **Generate N candidates across all tiers.** Skip the "pick the best one" step. Instead, generate 5-15 candidates spanning T0-T3. Don't filter by estimated impact - let measurement decide.
+
+2. **Write N specs in parallel.** Each spec is a self-contained optimization experiment. Use the standard spec format but add `parallel_batch: <batch_id>` to the metadata.
+
+3. **Execute all N in isolated branches.** Each experiment runs in its own git worktree or branch. No experiment can see another's changes. Build + benchmark independently.
+
+4. **Rank by measured impact.** After all N complete, rank by actual `delta_pct`. The winner is KEPT. All others are logged as DISCARD with `batch_id` and `batch_rank` in their hypothesis_feedback entry (this feeds the learning loop - a discarded +3% is still useful calibration data).
+
+5. **Compose if compatible.** If the top 2-3 results target different hotspots and their changes don't overlap, attempt sequential composition: apply #1, re-benchmark, apply #2, re-benchmark. Composition fails if the combined delta is less than the sum of individual deltas by more than 20% (interference).
+
+### Tradeoffs
+
+- **Pro:** Explores more of the search space per wall-clock hour. Avoids local optima from sequential hill-climbing. Discovers surprising wins that sequential tier exhaustion would never reach (the Paradigm winner found an "arbitrage risk probability" model that no human designed).
+- **Con:** N times the compute cost. Most candidates will be discarded. Requires fast benchmarks - if each run takes 30 minutes, 15 parallel experiments is 7.5 hours of GPU time.
+- **When NOT to use:** When T0 has clear, untargeted hotspots above 20% inclusive time. Sequential T0 is cheaper and higher-confidence. Parallel search is for when you've exhausted the obvious wins.
+
+### Logging
+
+Individual experiments use standard hypothesis_feedback entries in `autooptimize-experiments.jsonl` with an added `batch_id` and `batch_rank` field. The batch summary goes to `autooptimize-meta.jsonl` (Channel 2) to avoid breaking the Channel 1 schema:
+
+```jsonl
+{"type":"parallel_batch","batch_id":"pb_003","n_candidates":12,"n_kept":1,"n_composed":0,"best_delta_pct":4.1,"median_delta_pct":0.8,"wall_clock_min":45,"compute_min":540}
+```
 
 ---
 
