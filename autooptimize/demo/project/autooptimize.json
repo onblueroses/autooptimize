@@ -1,0 +1,14 @@
+{
+  "target": "target.py",
+  "benchmark": {
+    "command": ["{python}", "bench.py"],
+    "frozen": ["bench.py", "inputs.json"]
+  },
+  "direction": "lower",
+  "keep_rule": {
+    "min_gain": {"value": 0.2, "source": "ruling: the demo changes are near 0% or far above 20%, and 20% leaves room for a noisy machine"},
+    "confidence": {"value": 0.99, "source": "ruling: a 99% interval, so the null control raises a false alarm in at most 1 run of 100"},
+    "runs_per_side": {"value": 10, "source": "measured: in 15 demo runs on a shared cloud VM, 14 passed the preflight with detection limits of 1.1% to 15.4%, and 1 refused at 29.3%"}
+  },
+  "arms": ["tidy", "algorithm", "data structure", "caching"]
+}
