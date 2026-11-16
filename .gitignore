@@ -1,11 +1,16 @@
 # Agent-local state
-skills/autooptimize/
 .claude/
 CLAUDE.md
 .env
+.local/
+
+# Run folders of the loop
+.autooptimize/
 
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
+build/
 .pytest_cache/
 .ruff_cache/
