@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autooptimize"
+version = "3.0.0"
+description = "An optimization loop for Claude Code that can come back red: frozen contract, controls, noise-aware keep rule."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+autooptimize = "autooptimize.cli:main"
+
+[tool.setuptools]
+packages = ["autooptimize"]
+
+[tool.setuptools.package-data]
+autooptimize = ["demo/project/*", "demo/project/.gitignore", "demo/proposals/*.py"]
